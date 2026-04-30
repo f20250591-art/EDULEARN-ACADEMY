@@ -1,0 +1,173 @@
+const express = require('express');
+const app = express();
+
+app.use(express.json());
+
+/* In-memory data */
+let courses = [
+  { id: 1, title: "Web Development", description: "HTML, CSS, JS", videos: [] },
+  { id: 2, title: "Data Science", description: "Python & ML", videos: [] }
+];
+
+let enrollments = [];
+let progress = [];
+
+/* API ROUTES */
+
+// Get courses
+app.get('/courses', (req, res) => res.json(courses));
+
+// Enroll
+app.post('/enroll', (req, res) => {
+  enrollments.push(req.body);
+  res.json({ message: "Enrolled" });
+});
+
+// Progress
+app.post('/progress', (req, res) => {
+  progress.push(req.body);
+  res.json({ message: "Progress saved" });
+});
+
+// Certificate
+app.get('/certificate', (req, res) => {
+  const { name, courseId } = req.query;
+  res.send(`🎓 Certificate: ${name} completed course ${courseId}`);
+});
+
+// Add course
+app.post('/courses', (req, res) => {
+  const c = req.body;
+  c.id = courses.length + 1;
+  c.videos = [];
+  courses.push(c);
+  res.json(c);
+});
+
+// Delete course
+app.delete('/courses/:id', (req, res) => {
+  courses = courses.filter(c => c.id != req.params.id);
+  res.json({ message: "Deleted" });
+});
+
+// Add video
+app.post('/courses/:id/videos', (req, res) => {
+  const course = courses.find(c => c.id == req.params.id);
+  if (course) {
+    course.videos.push(req.body.url);
+    res.json({ message: "Video added" });
+  }
+});
+
+/* FRONTEND (HTML INSIDE NODE) */
+
+app.get('/', (req, res) => {
+  res.send(`
+<!DOCTYPE html>
+<html>
+<head>
+<title>EduLearn</title>
+<style>
+body { font-family: Arial; padding:20px; background:#f4f6f9; }
+.card { background:white; padding:15px; margin:10px; border-radius:10px; }
+button { margin:5px; padding:5px 10px; }
+</style>
+</head>
+<body>
+
+<h1>EduLearn Academy</h1>
+
+<h2>Courses</h2>
+<div id="courses"></div>
+
+<h2>Admin Panel</h2>
+<input id="title" placeholder="Course Title">
+<input id="desc" placeholder="Description">
+<button onclick="addCourse()">Add Course</button>
+
+<script>
+async function loadCourses(){
+  const res = await fetch('/courses');
+  const data = await res.json();
+
+  const div = document.getElementById('courses');
+  div.innerHTML = '';
+
+  data.forEach(c => {
+    div.innerHTML += \`
+      <div class="card">
+        <h3>\${c.title}</h3>
+        <p>\${c.description}</p>
+
+        <button onclick="enroll(\${c.id})">Enroll</button>
+        <button onclick="progress(\${c.id})">Progress</button>
+        <button onclick="certificate(\${c.id})">Certificate</button>
+
+        <button onclick="addVideo(\${c.id})">Add Video</button>
+        <button onclick="deleteCourse(\${c.id})">Delete</button>
+
+        <div>
+          \${c.videos.map(v => '<video src="'+v+'" width="200" controls></video>').join('')}
+        </div>
+      </div>
+    \`;
+  });
+}
+
+function enroll(id){
+  const name = prompt("Your name:");
+  fetch('/enroll',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name, courseId:id})
+  }).then(()=>alert("Enrolled"));
+}
+
+function progress(id){
+  const name = prompt("Name:");
+  const value = prompt("Progress %:");
+  fetch('/progress',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({name, courseId:id, value})
+  });
+}
+
+function certificate(id){
+  const name = prompt("Name:");
+  window.open('/certificate?name='+name+'&courseId='+id);
+}
+
+function addCourse(){
+  fetch('/courses',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({
+      title: document.getElementById('title').value,
+      description: document.getElementById('desc').value
+    })
+  }).then(loadCourses);
+}
+
+function deleteCourse(id){
+  fetch('/courses/'+id,{method:'DELETE'}).then(loadCourses);
+}
+
+function addVideo(id){
+  const url = prompt("Video URL:");
+  fetch('/courses/'+id+'/videos',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({url})
+  }).then(loadCourses);
+}
+
+loadCourses();
+</script>
+
+</body>
+</html>
+  `);
+});
+
+app.listen(3000, () => console.log("http://localhost:3000"));
